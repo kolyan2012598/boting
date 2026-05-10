@@ -267,8 +267,6 @@ func handleCommand(msg *tgbotapi.Message, isGroup bool) {
 		if isGroup {
 			startDuel(chatID, userID, args, msg)
 		}
-	case "coinflip":
-		playCoinFlip(chatID, userID, args)
 	case "top":
 		showTopPlayers(chatID)
 	case "info":
