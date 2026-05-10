@@ -712,35 +712,13 @@ func startDuel(chatID, userID int64, args []string, msg *tgbotapi.Message) {
 		bot.Send(tgbotapi.NewMessage(chatID, "Reply to someone"))
 		return
 	}
-	bet := 50
-	if len(args) > 0 {
-		bet, _ = strconv.Atoi(args[0])
-	}
 	p1 := msg.From.FirstName
 	p2 := msg.ReplyToMessage.From.FirstName
+	winner := p1
 	if rand.Intn(2) == 0 {
-		bot.Send(tgbotapi.NewMessage(chatID, fmt.Sprintf("⚔️ %s won vs %s!", p1, p2)))
-	} else {
-		bot.Send(tgbotapi.NewMessage(chatID, fmt.Sprintf("⚔️ %s won vs %s!", p2, p1)))
+		winner = p2
 	}
-}
-
-func playCoinFlip(chatID, userID int64, args []string) {
-	if len(args) == 0 {
-		bot.Send(tgbotapi.NewMessage(chatID, "/coinflip [bet]"))
-		return
-	}
-	bet, _ := strconv.Atoi(args[0])
-	result := []string{"heads", "tails"}[rand.Intn(2)]
-	mu.Lock()
-	u := users[userID]
-	if u.Coins < bet {
-		mu.Unlock()
-		return
-	}
-	u.Coins += bet
-	mu.Unlock()
-	bot.Send(tgbotapi.NewMessage(chatID, fmt.Sprintf("🪙 %s! +%d!", result, bet)))
+	bot.Send(tgbotapi.NewMessage(chatID, fmt.Sprintf("⚔️ %s won vs %s!", winner, p2)))
 }
 
 func showTopPlayers(chatID int64) {
