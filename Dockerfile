@@ -2,11 +2,11 @@ FROM golang:1.21-alpine
 
 WORKDIR /app
 
-COPY go.mod go.sum ./
-RUN go mod download
+COPY go.mod ./
+RUN go mod download all
 
-COPY *.go ./
-
+COPY main.go ./
+RUN go mod tidy
 RUN go build -o bot .
 
 CMD ["./bot"]
