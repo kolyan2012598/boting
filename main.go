@@ -181,9 +181,7 @@ func handleMessage(msg *tgbotapi.Message) {
 	}
 
 	if msg.NewChatMembers != nil {
-		for _, member := range *msg.NewChatMembers {
-			handleNewMember(chatID, member)
-		}
+    for _, member := range msg.NewChatMembers {
 	}
 
 	if strings.HasPrefix(text, "/") || strings.HasPrefix(text, "!") {
