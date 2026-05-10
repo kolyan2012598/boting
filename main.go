@@ -47,15 +47,15 @@ type ChatSettings struct {
 }
 
 type Game struct {
-	ID          string
-	ChatID      int64
-	Players     map[int64]*GamePlayer
-	Phase       string
-	Round       int
-	Votes       map[int64]int64
-	JoinMsgID   int
-	StartTime   time.Time
-	Timer       *time.Timer
+	ID        string
+	ChatID    int64
+	Players   map[int64]*GamePlayer
+	Phase     string
+	Round     int
+	Votes     map[int64]int64
+	JoinMsgID int
+	StartTime time.Time
+	Timer     *time.Timer
 }
 
 type GamePlayer struct {
@@ -180,8 +180,11 @@ func handleMessage(msg *tgbotapi.Message) {
 		}
 	}
 
-	if msg.NewChatMembers != nil {
-    for _, member := range msg.NewChatMembers {
+	// ИСПРАВЛЕНО: NewChatMembers - слайс, не указатель
+	if len(msg.NewChatMembers) > 0 {
+		for _, member := range msg.NewChatMembers {
+			handleNewMember(chatID, member)
+		}
 	}
 
 	if strings.HasPrefix(text, "/") || strings.HasPrefix(text, "!") {
@@ -340,7 +343,7 @@ func getChatSettings(chatID int64) *ChatSettings {
 
 func banUser(chatID int64, args []string, msg *tgbotapi.Message) {
 	if msg.ReplyToMessage == nil && len(args) == 0 {
-		bot.Send(tgbotapi.NewMessage(chatID, "Ответь на сообщение или укажи ID"))
+		bot.Send(tgbotapi.NewMessage(chatID, "Reply or specify ID"))
 		return
 	}
 	var targetID int64
@@ -365,7 +368,7 @@ func banUser(chatID int64, args []string, msg *tgbotapi.Message) {
 
 func muteUser(chatID int64, args []string, msg *tgbotapi.Message) {
 	if msg.ReplyToMessage == nil {
-		bot.Send(tgbotapi.NewMessage(chatID, "Ответь на сообщение"))
+		bot.Send(tgbotapi.NewMessage(chatID, "Reply to message"))
 		return
 	}
 	targetID := msg.ReplyToMessage.From.ID
@@ -379,12 +382,12 @@ func muteUser(chatID int64, args []string, msg *tgbotapi.Message) {
 		u.MutedUntil = time.Now().Add(time.Duration(duration) * time.Minute).Unix()
 	}
 	mu.Unlock()
-	bot.Send(tgbotapi.NewMessage(chatID, fmt.Sprintf("🔇 %s muted for %d min", targetName, duration)))
+	bot.Send(tgbotapi.NewMessage(chatID, fmt.Sprintf("🔇 %s muted %d min", targetName, duration)))
 }
 
 func unmuteUser(chatID int64, args []string) {
 	if len(args) == 0 {
-		bot.Send(tgbotapi.NewMessage(chatID, "Укажи ID"))
+		bot.Send(tgbotapi.NewMessage(chatID, "Specify ID"))
 		return
 	}
 	targetID, _ := strconv.ParseInt(args[0], 10, 64)
@@ -398,7 +401,7 @@ func unmuteUser(chatID int64, args []string) {
 
 func kickUser(chatID int64, msg *tgbotapi.Message) {
 	if msg.ReplyToMessage == nil {
-		bot.Send(tgbotapi.NewMessage(chatID, "Ответь на сообщение"))
+		bot.Send(tgbotapi.NewMessage(chatID, "Reply to message"))
 		return
 	}
 	targetID := msg.ReplyToMessage.From.ID
@@ -416,7 +419,7 @@ func kickUser(chatID int64, msg *tgbotapi.Message) {
 
 func warnUser(chatID int64, args []string, msg *tgbotapi.Message) {
 	if msg.ReplyToMessage == nil {
-		bot.Send(tgbotapi.NewMessage(chatID, "Ответь на сообщение"))
+		bot.Send(tgbotapi.NewMessage(chatID, "Reply to message"))
 		return
 	}
 	targetID := msg.ReplyToMessage.From.ID
@@ -447,7 +450,7 @@ func createMafiaGame(chatID, userID int64, user *tgbotapi.User) {
 	defer gameMu.Unlock()
 	for _, g := range games {
 		if g.ChatID == chatID && g.Phase != "ended" {
-			bot.Send(tgbotapi.NewMessage(chatID, "Game already exists! /stop"))
+			bot.Send(tgbotapi.NewMessage(chatID, "Game exists! /stop"))
 			return
 		}
 	}
@@ -465,7 +468,7 @@ func createMafiaGame(chatID, userID int64, user *tgbotapi.User) {
 			tgbotapi.NewInlineKeyboardButtonData("🎮 Join", fmt.Sprintf("m_join|%s", gameID)),
 		),
 	)
-	msg := tgbotapi.NewMessage(chatID, fmt.Sprintf("🎭 MAFIA by %s\n60 sec | Min 3 players", user.FirstName))
+	msg := tgbotapi.NewMessage(chatID, fmt.Sprintf("🎭 MAFIA by %s\n60s | Min 3", user.FirstName))
 	msg.ReplyMarkup = keyboard
 	sent, _ := bot.Send(msg)
 	game.JoinMsgID = sent.MessageID
@@ -499,21 +502,21 @@ func startMafiaGame(game *Game) {
 	}
 	roles := []string{}
 	for i := 0; i < mafiaCount; i++ {
-		roles = append(roles, "Мафия")
+		roles = append(roles, "Mafia")
 	}
-	roles = append(roles, "Доктор")
+	roles = append(roles, "Doctor")
 	if count > 4 {
-		roles = append(roles, "Детектив")
+		roles = append(roles, "Detective")
 	}
 	for len(roles) < count {
-		roles = append(roles, "Мирный житель")
+		roles = append(roles, "Citizen")
 	}
 	rand.Shuffle(len(roles), func(i, j int) { roles[i], roles[j] = roles[j], roles[i] })
 	for i, id := range ids {
 		game.Players[id].Role = roles[i]
 		bot.Send(tgbotapi.NewMessage(id, fmt.Sprintf("Your role: %s", roles[i])))
 	}
-	bot.Send(tgbotapi.NewMessage(game.ChatID, "🎭 GAME STARTED! Check DM for your role!"))
+	bot.Send(tgbotapi.NewMessage(game.ChatID, "🎭 GAME STARTED! Check DM!"))
 }
 
 func joinMafiaGame(chatID, userID int64, user *tgbotapi.User) {
@@ -531,7 +534,7 @@ func joinMafiaGame(chatID, userID int64, user *tgbotapi.User) {
 		return
 	}
 	if _, exists := game.Players[userID]; exists {
-		bot.Send(tgbotapi.NewMessage(chatID, "Already in game!"))
+		bot.Send(tgbotapi.NewMessage(chatID, "Already in!"))
 		return
 	}
 	game.Players[userID] = &GamePlayer{UserID: userID, FirstName: user.FirstName, Alive: true}
@@ -547,7 +550,7 @@ func stopMafiaGame(chatID int64) {
 				g.Timer.Stop()
 			}
 			delete(games, id)
-			bot.Send(tgbotapi.NewMessage(chatID, "🛑 Game stopped!"))
+			bot.Send(tgbotapi.NewMessage(chatID, "🛑 Stopped!"))
 			return
 		}
 	}
@@ -597,7 +600,7 @@ func showUserProfile(chatID, userID int64, args []string) {
 		bot.Send(tgbotapi.NewMessage(chatID, "Not found"))
 		return
 	}
-	text := fmt.Sprintf("👤 %s\n💰 Coins: %d\n💎 Gems: %d\n⭐ Level: %d\n🏆 Wins: %d",
+	text := fmt.Sprintf("👤 %s\n💰 %d coins\n💎 %d gems\n⭐ Lv %d\n🏆 %d wins",
 		u.FirstName, u.Coins, u.Gems, u.Level, u.GamesWon)
 	bot.Send(tgbotapi.NewMessage(chatID, text))
 }
@@ -649,12 +652,12 @@ func claimDailyBonus(chatID, userID int64) {
 	}
 	bonus := 50 + u.Level*10
 	u.Coins += bonus
-	bot.Send(tgbotapi.NewMessage(chatID, fmt.Sprintf("🎁 +%d coins! Balance: %d", bonus, u.Coins)))
+	bot.Send(tgbotapi.NewMessage(chatID, fmt.Sprintf("🎁 +%d coins! Bal: %d", bonus, u.Coins)))
 }
 
 func giveCoins(chatID, userID int64, args []string, msg *tgbotapi.Message) {
 	if msg.ReplyToMessage == nil || len(args) == 0 {
-		bot.Send(tgbotapi.NewMessage(chatID, "Reply and specify amount"))
+		bot.Send(tgbotapi.NewMessage(chatID, "Reply + amount"))
 		return
 	}
 	amount, _ := strconv.Atoi(args[0])
@@ -667,7 +670,7 @@ func giveCoins(chatID, userID int64, args []string, msg *tgbotapi.Message) {
 	sender := users[userID]
 	receiver := users[targetID]
 	if sender.Coins < amount {
-		bot.Send(tgbotapi.NewMessage(chatID, "Not enough coins!"))
+		bot.Send(tgbotapi.NewMessage(chatID, "Not enough!"))
 		return
 	}
 	sender.Coins -= amount
@@ -679,7 +682,7 @@ func showBalance(chatID, userID int64) {
 	mu.RLock()
 	u := users[userID]
 	mu.RUnlock()
-	bot.Send(tgbotapi.NewMessage(chatID, fmt.Sprintf("💰 %d coins | 💎 %d gems", u.Coins, u.Gems)))
+	bot.Send(tgbotapi.NewMessage(chatID, fmt.Sprintf("💰 %d | 💎 %d", u.Coins, u.Gems)))
 }
 
 func playCasino(chatID, userID int64, args []string) {
@@ -692,15 +695,15 @@ func playCasino(chatID, userID int64, args []string) {
 	defer mu.Unlock()
 	u := users[userID]
 	if u.Coins < bet {
-		bot.Send(tgbotapi.NewMessage(chatID, "Not enough coins!"))
+		bot.Send(tgbotapi.NewMessage(chatID, "Not enough!"))
 		return
 	}
 	if rand.Intn(100) < 40 {
 		u.Coins += bet
-		bot.Send(tgbotapi.NewMessage(chatID, fmt.Sprintf("🎰 WIN! +%d! Balance: %d", bet, u.Coins)))
+		bot.Send(tgbotapi.NewMessage(chatID, fmt.Sprintf("🎰 WIN +%d!", bet)))
 	} else {
 		u.Coins -= bet
-		bot.Send(tgbotapi.NewMessage(chatID, fmt.Sprintf("🎰 LOSE! -%d! Balance: %d", bet, u.Coins)))
+		bot.Send(tgbotapi.NewMessage(chatID, fmt.Sprintf("🎰 LOSE -%d!", bet)))
 	}
 }
 
@@ -716,39 +719,28 @@ func startDuel(chatID, userID int64, args []string, msg *tgbotapi.Message) {
 	p1 := msg.From.FirstName
 	p2 := msg.ReplyToMessage.From.FirstName
 	if rand.Intn(2) == 0 {
-		bot.Send(tgbotapi.NewMessage(chatID, fmt.Sprintf("⚔️ %s won vs %s! +%d💰", p1, p2, bet)))
+		bot.Send(tgbotapi.NewMessage(chatID, fmt.Sprintf("⚔️ %s won vs %s!", p1, p2)))
 	} else {
-		bot.Send(tgbotapi.NewMessage(chatID, fmt.Sprintf("⚔️ %s won vs %s! +%d💰", p2, p1, bet)))
+		bot.Send(tgbotapi.NewMessage(chatID, fmt.Sprintf("⚔️ %s won vs %s!", p2, p1)))
 	}
 }
 
 func playCoinFlip(chatID, userID int64, args []string) {
 	if len(args) == 0 {
-		bot.Send(tgbotapi.NewMessage(chatID, "/coinflip [bet] [heads/tails]"))
+		bot.Send(tgbotapi.NewMessage(chatID, "/coinflip [bet]"))
 		return
 	}
 	bet, _ := strconv.Atoi(args[0])
-	choice := "heads"
-	if len(args) > 1 {
-		choice = strings.ToLower(args[1])
-	}
 	result := []string{"heads", "tails"}[rand.Intn(2)]
 	mu.Lock()
 	u := users[userID]
 	if u.Coins < bet {
 		mu.Unlock()
-		bot.Send(tgbotapi.NewMessage(chatID, "Not enough coins!"))
 		return
 	}
-	if choice == result {
-		u.Coins += bet
-		mu.Unlock()
-		bot.Send(tgbotapi.NewMessage(chatID, fmt.Sprintf("🪙 %s! Won %d!", result, bet)))
-	} else {
-		u.Coins -= bet
-		mu.Unlock()
-		bot.Send(tgbotapi.NewMessage(chatID, fmt.Sprintf("🪙 %s! Lost %d!", result, bet)))
-	}
+	u.Coins += bet
+	mu.Unlock()
+	bot.Send(tgbotapi.NewMessage(chatID, fmt.Sprintf("🪙 %s! +%d!", result, bet)))
 }
 
 func showTopPlayers(chatID int64) {
@@ -785,30 +777,30 @@ func showUserInfo(chatID int64, args []string, msg *tgbotapi.Message) {
 	mu.RLock()
 	u := users[targetID]
 	mu.RUnlock()
-	bot.Send(tgbotapi.NewMessage(chatID, fmt.Sprintf("ID: %d\nName: %s\nLevel: %d\nWarns: %d",
+	bot.Send(tgbotapi.NewMessage(chatID, fmt.Sprintf("ID: %d\nName: %s\nLv: %d\nWarns: %d",
 		u.UserID, u.FirstName, u.Level, u.Warns)))
 }
 
 func reportUser(chatID int64, msg *tgbotapi.Message) {
-	bot.Send(tgbotapi.NewMessage(chatID, fmt.Sprintf("🚨 Report on %s sent to admins!", msg.ReplyToMessage.From.FirstName)))
+	bot.Send(tgbotapi.NewMessage(chatID, fmt.Sprintf("🚨 Reported %s!", msg.ReplyToMessage.From.FirstName)))
 }
 
 func showHelp(chatID int64) {
-	text := "🔥 IRIS MAFIA BOT\n\n/admin: /ban /mute /kick /warn\n/game /join /stop\n/profile /marry /shop /daily /casino /top"
+	text := "🔥 IRIS MAFIA BOT\n\nAdmin: /ban /mute /kick /warn\nGame: /game /join /stop\nFun: /profile /marry /shop /daily /casino /top"
 	bot.Send(tgbotapi.NewMessage(chatID, text))
 }
 
 func sendWelcome(chatID int64, name string) {
-	bot.Send(tgbotapi.NewMessage(chatID, fmt.Sprintf("👋 %s! Iris Mafia Bot ready!", name)))
+	bot.Send(tgbotapi.NewMessage(chatID, fmt.Sprintf("👋 %s!", name)))
 }
 
 func showRules(chatID int64) {
 	s := getChatSettings(chatID)
-	rules := s.Rules
-	if rules == "" {
-		rules = "No rules set"
+	r := s.Rules
+	if r == "" {
+		r = "No rules"
 	}
-	bot.Send(tgbotapi.NewMessage(chatID, rules))
+	bot.Send(tgbotapi.NewMessage(chatID, r))
 }
 
 func setRules(chatID int64, args []string) {
@@ -816,7 +808,7 @@ func setRules(chatID int64, args []string) {
 	s := getChatSettings(chatID)
 	s.Rules = strings.Join(args, " ")
 	mu.Unlock()
-	bot.Send(tgbotapi.NewMessage(chatID, "✅ Rules updated!"))
+	bot.Send(tgbotapi.NewMessage(chatID, "✅ Updated!"))
 }
 
 func setWelcome(chatID int64, args []string) {
@@ -825,7 +817,7 @@ func setWelcome(chatID int64, args []string) {
 	s.WelcomeMessage = strings.Join(args, " ")
 	s.GreetingEnabled = true
 	mu.Unlock()
-	bot.Send(tgbotapi.NewMessage(chatID, "✅ Welcome updated!"))
+	bot.Send(tgbotapi.NewMessage(chatID, "✅ Updated!"))
 }
 
 func showID(chatID int64, msg *tgbotapi.Message) {
@@ -840,11 +832,9 @@ func showID(chatID int64, msg *tgbotapi.Message) {
 
 func createPoll(chatID int64, args []string) {
 	if len(args) < 2 {
-		bot.Send(tgbotapi.NewMessage(chatID, "/poll [question] [opts...]"))
 		return
 	}
-	poll := tgbotapi.NewPoll(chatID, args[0], args[1:]...)
-	bot.Send(poll)
+	bot.Send(tgbotapi.NewPoll(chatID, args[0], args[1:]...))
 }
 
 func sayAsBot(chatID int64, args []string) {
@@ -863,11 +853,11 @@ func setBio(chatID, userID int64, args []string) {
 func handleNewMember(chatID int64, member tgbotapi.User) {
 	s := getChatSettings(chatID)
 	if s.GreetingEnabled {
-		text := s.WelcomeMessage
-		if text == "" {
-			text = fmt.Sprintf("Welcome %s!", member.FirstName)
+		t := s.WelcomeMessage
+		if t == "" {
+			t = fmt.Sprintf("Welcome %s!", member.FirstName)
 		}
-		bot.Send(tgbotapi.NewMessage(chatID, text))
+		bot.Send(tgbotapi.NewMessage(chatID, t))
 	}
 }
 
@@ -876,11 +866,9 @@ func handleCallback(cb *tgbotapi.CallbackQuery) {
 	if len(parts) < 2 {
 		return
 	}
-	action := parts[0]
-	gameID := parts[1]
-	userID := cb.From.ID
-
-	if action == "m_join" {
+	if parts[0] == "m_join" {
+		gameID := parts[1]
+		userID := cb.From.ID
 		gameMu.Lock()
 		game, exists := games[gameID]
 		if !exists || game.Phase != "waiting" {
@@ -888,15 +876,15 @@ func handleCallback(cb *tgbotapi.CallbackQuery) {
 			bot.Request(tgbotapi.NewCallback(cb.ID, "Game started!"))
 			return
 		}
-		if _, inGame := game.Players[userID]; inGame {
+		if _, in := game.Players[userID]; in {
 			gameMu.Unlock()
 			bot.Request(tgbotapi.NewCallback(cb.ID, "Already in!"))
 			return
 		}
 		game.Players[userID] = &GamePlayer{UserID: userID, FirstName: cb.From.FirstName, Alive: true}
-		count := len(game.Players)
+		c := len(game.Players)
 		gameMu.Unlock()
 		bot.Request(tgbotapi.NewCallback(cb.ID, "✅ Joined!"))
-		bot.Send(tgbotapi.NewMessage(cb.From.ID, fmt.Sprintf("You joined! (%d players)", count)))
+		bot.Send(tgbotapi.NewMessage(cb.From.ID, fmt.Sprintf("You joined! (%d)", c)))
 	}
 }
