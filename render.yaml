@@ -1,0 +1,5 @@
+app = "mafia-bot"
+[build]
+  builder = "golang"
+[services]
+  internal_port = 8080
